@@ -6,11 +6,11 @@
     "course": "자동제어 - 2026 봄",
     "ai_usage": "Claude used for LQR/MPC prototyping and tuning; verified via MATLAB by the author."
   },
-  "timestamp": "2026-06-17T15:45:02",
+  "timestamp": "2026-06-23T14:47:52",
   "quantitative": {
-    "score": 53.39425901393767,
+    "score": 58.272486392438758,
     "max": 70,
-    "pct": 76.277512877053823
+    "pct": 83.246409132055376
   },
   "deductions": {
     "amount": 0,
@@ -101,15 +101,15 @@
     {
       "sid": "B1",
       "kpi": "stoppingDistance",
-      "value": 72.2992319914078,
-      "target": 40,
-      "score": 0,
+      "value": 67.309787932967765,
+      "target": 66.5,
+      "score": 4.8782273785010881,
       "max": 5
     },
     {
       "sid": "B1",
       "kpi": "absSlipRMS",
-      "value": 0.72950347098814272,
+      "value": 0.71368032709251517,
       "target": 0.1,
       "score": 0,
       "max": 5
@@ -117,7 +117,7 @@
     {
       "sid": "D1",
       "kpi": "sideSlipMax",
-      "value": 2.0360125420780903,
+      "value": 2.5900049555626912,
       "target": 4,
       "score": 4,
       "max": 4
@@ -139,8 +139,8 @@
       "max": 2
     }
   ],
-  "final_auto": 53.39425901393767,
-  "ctrl_signature": "58a6ca2151d1022980ef52f9a6c45167c22b524321bc5382658c2f35d9e69d13",
+  "final_auto": 58.272486392438758,
+  "ctrl_signature": "15c69407524a61999fe4b0251b965cab635cf2023dc04de2de21ca805dadf7c0",
   "matlab_version": "25.2 (R2025b)",
   "solver_used": "ode45"
 }

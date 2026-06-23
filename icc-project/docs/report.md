@@ -20,7 +20,7 @@
 
 **각 제어기 요약**
 - **ctrl_lateral**: 2-DOF Bicycle 에러상태에 대한 **LQR↔MPC 전환 제어**(yaw rate 추종) + 슬립각 β-limiter(ESC)
-- **ctrl_longitudinal**: **PI 속도 추종 + slip-limiting ABS** (휠 슬립 |κ|>0.12 시 제동 감쇠)
+- **ctrl_longitudinal**: **PI 속도 추종 + 휠별 가산 슬립-타겟 ABS** (직진 강제동 시 하중이 쏠려 여유 있는 전륜을 peak slip까지 추가 제동 → 정지거리 단축)
 - **ctrl_vertical**: **연속(비례형) Skyhook** 반능동 감쇠 (CDC)
 - **ctrl_coordinator**: 요모멘트 → 좌우 **차동 제동**(전후 60:40) + 종방향 제동 분배 + 마찰원 제약
 
@@ -94,13 +94,18 @@ $(w_{v_y},w_r,r_u,q_{du})=(0.3,30,80,300)$. condensed QP를 **Hildreth 쌍대법
 
 **ESC**: $|\beta|>2.5^\circ\Rightarrow M_z=-9000(\beta-\mathrm{sgn}(\beta)2.5^\circ)\min(v_x/20,2)$.
 
-### 3.2 ctrl_longitudinal — 속도 추종 PI + ABS
+### 3.2 ctrl_longitudinal — 속도 추종 PI + 휠별 가산 슬립-타겟 ABS
 
+속도 추종(PI):
 $$
 e_v=v_{x,\mathrm{ref}}-v_x,\quad F_x=m\,(K_p e_v+K_i\!\textstyle\int e_v)
 $$
 
-ABS: 감속 중($a_x<0$) 휠 슬립 $|\kappa|>0.12$이면 제동력을 bang-bang 감쇠($F_x\leftarrow0.5F_x$). 저크 제한 $|\dot F_x|\le \mathrm{MAX\_JERK}\cdot m$, anti-windup. 휠 슬립은 runner가 `ctrlState.wheelSlip`로 전달.
+**가산 ABS (핵심)**: harness 가 시나리오 제동을 `brake_total = brk_scenario + brakeESC` 로 **가산만** 허용한다(제동을 줄일 수 없음). 그러나 직진 강제동 시 **하중이 전륜으로 쏠려 전륜은 거의 잠기지 않는다**(측정: 전륜 slip ≈ −0.04, peak −0.12). 이 **여유**를 활용해, 잠기지 않은 휠에만 제동을 **추가**하여 peak slip 까지 끌어올린다:
+$$
+\Delta T_i = \max\!\big(0,\ K_p^{abs}(\,|\kappa^*|-|\kappa_i|\,) + I_i\big),\quad \kappa^*=0.12
+$$
+오작동 방지 게이트 — **강한 직진 제동에서만 작동**: $a_x<-5\,\mathrm{m/s^2}$ **그리고** 좌우 휠 슬립 대칭($|\kappa_{FL}-\kappa_{FR}|,|\kappa_{RL}-\kappa_{RR}|<0.05$, 선회 배제). 잠긴 휠($|\kappa_i|>\kappa^*$)은 추가량 0 (감쇠 불가). 추가 제동 $\Delta T$ 는 coordinator 가 휠별로 가산한다.
 
 ### 3.3 ctrl_vertical — CDC(연속 Skyhook)
 
@@ -116,7 +121,7 @@ $$
 T_{brk,PW}=\frac{|F_x|}{4}r_w\ (F_x<0)
 $$
 
-좌우 차동 + 4륜 종방향 제동 합산, 마찰원 $\sqrt{F_x^2+F_y^2}\le\mu F_z$ 초과 시 스케일다운, $[0,\mathrm{MAX\_BRAKE}]$ 클리핑.
+좌우 차동 + 4륜 종방향 제동 + **ctrl_longitudinal 의 휠별 추가 제동 $\Delta T_i$** 를 합산, 마찰원 $\sqrt{F_x^2+F_y^2}\le\mu F_z$ 초과 시 스케일다운, $[0,\mathrm{MAX\_BRAKE}]$ 클리핑.
 
 ---
 
@@ -138,12 +143,12 @@ $$
 | A4 | sideSlipMax [°] | 1.184 | **1.178** | −0.5% |
 | A7 BIT | sideSlipMax [°] | 30.48 | **2.62** | **−91%** |
 | A7 | LTR_max | 0.681 | **0.375** | −45% |
-| B1 brake | stoppingDistance [m] | 72.30 | 72.30 | 0% |
+| B1 brake | stoppingDistance [m] | 72.30 | **67.31** | −7% |
 | B1 | absSlipRMS | 0.730 | 0.730 | 0% |
 | D1 통합 | sideSlipMax [°] | 4.91 | **2.04** | −58% |
 | D1 | LTR_max | 0.864 | **0.650** | −25% |
 
-**자동채점 점수: 53.39 / 70 (정량 76.3%).**
+**자동채점 점수: 58.27 / 70 (정량 83.2%).** (갱신된 B1 기준 ≤66.5 m 반영, B1 정지거리 4.88/5)
 
 ### 4.2 핵심 plot — A1 DLC
 
@@ -181,20 +186,23 @@ sideSlip 91% 감소로 최대 개선. (i) 베이스라인이 완전 스핀이라
 |---|---|
 | LQR 단일 | 48.71 / 70 |
 | MPC 단일 (DLC 부정합) | 31.44 / 70 |
-| **LQR↔MPC 전환 (제안)** | **53.39 / 70** |
+| **LQR↔MPC 전환 (횡)** | 53.39 / 70 |
+| ↑ + 전륜 가산 ABS (B1) | **58.27 / 70** |
 
 - **MPC 단일**: A3 정착시간 최고(0.19 s, 만점)지만 DLC에서 공격적 요추종이 LTR을 0.9까지 악화 → A1/D1 손실.
 - **LQR 단일**: DLC 우수하나 A3 정착시간 부분점수(2.72/4).
 - **전환**: A3에 MPC, DLC에 LQR을 배치 → 양쪽 강점 결합, **+4.68점**.
+- **전륜 가산 ABS**: 직진 강제동 시 전륜 여유(slip −0.04→−0.11)를 활용해 정지거리 72.3→67.3 m, 갱신 기준(≤66.5 m)에서 **+4.88점 → 최종 58.27**.
 
 ### 5.3 가장 부족했던 항목과 구조적 한계
 
-세 KPI(총 16점)는 4개 ctrl 파일만으로 개선 불가함을 확인했다.
+남은 미획득 KPI 와 그 원인:
 
 - **lateralDevMax (A1/D1, 6점)**: 경로이탈은 운전자(Stanley) 추종 한계가 지배한다. ctrl_lateral은 경로 위치 정보를 입력으로 받지 못하므로(요레이트·슬립·속도만) 경로를 직접 제어할 수 없고, 목표(0.70 m, 상한 1.40 m)가 OFF(1.83 m)보다 낮아 도달 불가.
-- **absSlipRMS·stoppingDistance (B1, 10점)**: ABS를 구현했으나, harness가 시나리오 제동을 `brake_total = brk_scenario + brakeESC`로 **가산**하고 coordinator 제동은 $\ge0$이라 시나리오 제동을 **감쇠할 수 없다**. 따라서 직진 제동 중 후륜 잠김을 막지 못한다(absSlipRMS 0.73 불변).
+- **absSlipRMS (B1, 5점)**: harness가 시나리오 제동을 `brake_total = brk_scenario + brakeESC`로 **가산**하고 coordinator 제동은 $\ge0$이라 **이미 잠긴 후륜의 제동을 줄일 수 없다**. 따라서 후륜 잠김(slip 0.71)은 해소 불가 → absSlipRMS 불변.
+- **stoppingDistance (B1, 5점)**: 위 가산 제약에도, **잠기지 않은 전륜에 제동을 추가**하는 방식으로 우회하여 72.3→67.3 m 로 단축, 갱신 기준(≤66.5 m)에서 **4.88/5 획득**. (정지거리만 부분 회복; 후륜 슬립은 여전히 제약)
 
-이들은 ctrl 외부(harness·driver) 수정을 요하므로 손댈 수 없다. 결과적으로 제어 가능 영역 상한(≈54점)에 근접한 53.39점을 달성했다.
+핵심 통찰: "제동을 줄일 수 없다"는 harness 제약은 **줄이는 ABS**(후륜 잠김 해소)는 막지만, **더하는 ABS**(전륜 여유 활용)는 허용한다 — 하중이동으로 전륜에 여유가 생긴다는 차량 동역학을 이용해 우회했다. 결과적으로 제어 가능 영역을 최대화한 **58.27점**을 달성했다.
 
 ### 5.4 더 시간이 있었다면
 

@@ -35,6 +35,11 @@ function actuatorCmd = ctrl_coordinator(latCmd, lonCmd, verCmd, vx, VEH, CTRL, L
     T(3) = brakePW + max(0,  dTr);   % RL
     T(4) = brakePW + max(0, -dTr);   % RR
 
+    % 휠별 가산 ABS — 여유 있는(덜 잠긴) 휠에 제동 추가
+    if isfield(lonCmd, 'brakeAdd') && numel(lonCmd.brakeAdd) == 4
+        T = T + lonCmd.brakeAdd(:);
+    end
+
     %% 3. 마찰원 실현가능성 (간이) — 총가속도 한계 초과 시 스케일다운
     totalAccel = sqrt((lonCmd.Fx_total/VEH.mass)^2 + (Mz/VEH.Iz*vx)^2);
     if totalAccel > LIM.MAX_AY
